@@ -1,0 +1,5 @@
+scrapy
+playwright
+geopy
+pandas
+lxml
