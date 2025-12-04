@@ -1,106 +1,118 @@
-# -*- coding: utf-8 -*-
+# Repositorio: Inteligencia_app
+# Archivo: mi_proyecto/mi_proyecto/pipelines.py
+# Implementa la limpieza, geocodificación y guardado del Super Bot.
 
 from scrapy.exceptions import DropItem
 from datetime import datetime
 from geopy.geocoders import Nominatim
 from geopy.exc import GeocoderTimedOut, GeocoderServiceError
-from pathlib import Path
-import os
 import json
 import logging
+import hashlib # CRÍTICO: Para generar un ID estable
+import os
+from pathlib import Path
 
-# Se definen las rutas para el Output
-# Asume que Datos_app es un repositorio hermano de Inteligencia_app
-DATOS_APP_PATH = Path(os.getcwd()).parents[3] / 'Datos_app' 
-# NOTA: Usamos parents[3] porque estamos en /spiders/ y necesitamos subir 3 niveles: 
-# /spiders/ -> /mi_proyecto/ -> /mi_proyecto/ -> /Inteligencia_app/ -> /CarpetaSuperior/
+# --- RUTA DE SALIDA (MVP OFFLINE) ---
+# En el MVP, guardamos en la carpeta local 'output/' dentro de Inteligencia_app.
+OUTPUT_DIR = Path(os.getcwd()) / 'output'
 
-class NormalizacionPipeline(object):
+
+class DataCleaningPipeline(object):
     """
-    Pipeline 1: Limpieza, validación y estandarización inicial de campos.
+    Pipeline 1 (300): Limpieza, validación, generación de ID ÚNICO y estandarización inicial.
     """
     def process_item(self, item, spider):
-        # 1. Validación de campos críticos de la Fase 1
+        # 1. Validación de campos críticos (No se puede procesar sin nombre o descuento)
         if not item.get('marca_nombre') or not item.get('descuento_valor_bruto'):
-            raise DropItem(f"Item incompleto y descartado (Fase 1): {item.get('url_origen_segmento')}")
+            raise DropItem(f"Item incompleto descartado (sin marca o descuento): {item.get('url_origen_segmento')}")
 
-        # 2. Normalización de descuento_valor_bruto (Ejemplo simple)
-        descuento_str = item.get('descuento_valor_bruto', '').strip().replace('%', '')
+        # 2. Normalización de descuento_valor_bruto (Convertir "50% dto." a 0.50)
+        descuento_str = item.get('descuento_valor_bruto', '').strip().replace('%', '').replace('dto.', '')
         try:
-            item['descuento_normalizado'] = float(descuento_str) / 100.0 if descuento_str else 0.0
+            # Asumimos que el descuento es un porcentaje si está presente
+            descuento_float = float(descuento_str) / 100.0 if descuento_str else 0.0
+            item['descuento_normalizado'] = round(descuento_float, 2)
         except ValueError:
             item['descuento_normalizado'] = 0.0
-            logging.warning(f"Error normalizando descuento: {descuento_str}")
+            logging.warning(f"Error normalizando descuento: '{descuento_str}'. Se estableció en 0.0.")
 
-        # 3. Asignación de metadatos de gestión
-        # La fecha se obtiene del sistema (configurada con TIMEZONE en settings.py)
+        # 3. Asignación de metadatos de gestión (Trazabilidad)
         item['fecha_extraccion'] = datetime.now().isoformat()
         
-        # Generar un ID único (ej. hash de la URL de origen y la marca)
-        item['id_unico'] = hash(item.get('url_origen_segmento') + item.get('marca_nombre'))
+        # 4. Generar ID ÚNICO ESTABLE (CRÍTICO: Usamos SHA-256 para deduplicación)
+        # Esto garantiza que el ID sea el mismo en cualquier máquina o ejecución.
+        unique_key = (
+            item.get('url_origen_segmento', '') + 
+            item.get('marca_nombre', '') + 
+            item.get('descuento_valor_bruto', '')
+        ).encode('utf-8')
+        item['id_unico'] = hashlib.sha256(unique_key).hexdigest()
         
         return item
 
 
-class GeocodificacionPipeline(object):
+class GeocodingPipeline(object):
     """
-    Pipeline 2: Toma la referencia de ubicación (lugar_referencia) y la convierte a Latitud/Longitud.
+    Pipeline 2 (400): Enriquecimiento del Item con Latitud/Longitud (CRÍTICO).
     """
     def __init__(self):
-        # Inicializa el geocodificador Nominatim (servicio gratuito de OpenStreetMap)
+        # Inicializa el geocodificador Nominatim con User-Agent profesional
         self.geolocator = Nominatim(user_agent="super_bot_aggregator_cl")
-        self.geocode_timeout = 5 # Tiempo límite para la petición de geocodificación
+        self.geocode_timeout = 5
 
     def process_item(self, item, spider):
         # 1. Validar si hay ubicación para geocodificar
         lugar = item.get('lugar_referencia')
-        if not lugar or lugar == 'N/A':
+        
+        # Agregamos "Santiago, Chile" a la búsqueda para mejorar precisión
+        search_query = f"{lugar}, Santiago, Chile" if lugar else None
+
+        if not search_query or search_query == 'N/A, Santiago, Chile':
             item['latitud'] = None
             item['longitud'] = None
             return item
         
         # 2. Intentar la geocodificación
         try:
-            # Agregamos 'Chile' para enfocar la búsqueda y mejorar la precisión
-            location = self.geolocator.geocode(f"{lugar}, Chile", timeout=self.geocode_timeout)
+            # CRÍTICO: El geocodificador debe ser lento y cortes (Built-in delay)
+            location = self.geolocator.geocode(search_query, timeout=self.geocode_timeout)
             
             if location:
                 item['latitud'] = location.latitude
                 item['longitud'] = location.longitude
-                logging.debug(f"Geocodificación exitosa: {lugar} -> ({location.latitude}, {location.longitude})")
+                # logging.debug(f"Geocodificación exitosa: {search_query}")
             else:
-                item['latitud'] = None
-                item['longitud'] = None
-                logging.warning(f"No se pudo geocodificar la ubicación: {lugar}")
+                logging.warning(f"No se pudo geocodificar la ubicación: '{search_query}'.")
         
-        except GeocoderTimedOut:
-            logging.error("Timeout en el servicio de geocodificación.")
-            # Se permite que el Item pase sin geocodificar
-        except GeocoderServiceError as e:
-            logging.error(f"Error en el servicio de geocodificación: {e}")
-            # Se permite que el Item pase sin geocodificar
+        except (GeocoderTimedOut, GeocoderServiceError):
+            logging.error("FALLO: Timeout o Error en el servicio de geocodificación. Saltando item.")
             
         return item
 
 
-class GuardadoFinalPipeline(object):
+class JsonWriterPipeline(object):
     """
-    Pipeline 3: Exporta el Item limpio y enriquecido al repositorio Datos_app.
+    Pipeline 3 (800): Exporta el Item limpio y enriquecido al disco local (MVP).
     """
     def open_spider(self, spider):
-        # Crea el archivo de salida al inicio del proceso de la araña
-        self.file_path = DATOS_APP_PATH / 'output' / f'{spider.name}_output_{datetime.now().strftime("%Y%m%d_%H%M%S")}.jsonl'
-        self.file_path.parent.mkdir(parents=True, exist_ok=True) # Asegura que la carpeta output exista
+        # Crea el archivo de salida (JSON Lines format)
+        output_file_name = f'{spider.name}_output_{datetime.now().strftime("%Y%m%d_%H%M%S")}.jsonl'
+        self.file_path = OUTPUT_DIR / output_file_name
+        
+        # Asegura que la carpeta 'output' exista en la raíz del proyecto
+        self.file_path.parent.mkdir(parents=True, exist_ok=True) 
+        
+        # Abre el archivo en modo escritura
         self.file = open(self.file_path, 'w', encoding='utf-8')
-        logging.info(f"El Output se guardará en: {self.file_path}")
+        logging.info(f"El Output final se guardará en: {self.file_path}")
 
     def close_spider(self, spider):
         # Cierra el archivo de salida al finalizar el proceso
-        self.file.close()
-        
+        if hasattr(self, 'file'):
+            self.file.close()
+            
     def process_item(self, item, spider):
         # Escribe cada Item como una línea JSON (JSON Lines format)
         line = json.dumps(dict(item), ensure_ascii=False) + "\n"
         self.file.write(line)
         return item
-
