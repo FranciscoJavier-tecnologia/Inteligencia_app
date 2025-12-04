@@ -1,87 +1,72 @@
+# -*- coding: utf-8 -*-
+
 # Scrapy settings for mi_proyecto project
 #
-# For simplicity, this file contains only settings considered important or
-# commonly used. You can find more settings consulting the documentation:
-#
-#     https://docs.scrapy.org/en/latest/topics/settings.html
-#     https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#     https://docs.scrapy.org/en/latest/topics/spider-middleware.html
+# Este archivo contiene la configuración de la Sala de Control para el Super Bot Aggregator CL.
+# Se enfoca en el Stealth (Evasión), la Concurrencia y la activación de los Pipelines.
 
-BOT_NAME = "mi_proyecto"
+# ==============================================================================
+# 1. CONFIGURACIÓN BÁSICA DEL PROYECTO
+# ==============================================================================
 
-SPIDER_MODULES = ["mi_proyecto.spiders"]
-NEWSPIDER_MODULE = "mi_proyecto.spiders"
+BOT_NAME = 'super_bot_aggregator_cl'
 
-ADDONS = {}
+SPIDER_MODULES = ['mi_proyecto.spiders']
+NEWSPIDER_MODULE = 'mi_proyecto.spiders'
 
+# Configuramos la zona horaria para el Item de fecha_extraccion (Chile)
+TIMEZONE = 'America/Santiago'
+FEED_EXPORT_ENCODING = 'utf-8'
 
-# Crawl responsibly by identifying yourself (and your website) on the user-agent
-#USER_AGENT = "mi_proyecto (+http://www.yourdomain.com)"
+# ==============================================================================
+# 2. CONFIGURACIONES CRÍTICAS DE EXTRACCIÓN Y EVASIÓN (Stealth)
+# ==============================================================================
 
-# Obey robots.txt rules
-ROBOTSTXT_OBEY = True
+# Desactivamos la obediencia al robots.txt para acceder a todas las URLs (CRÍTICO para scraping)
+ROBOTSTXT_OBEY = False
 
-# Concurrency and throttling settings
-#CONCURRENT_REQUESTS = 16
+# User-Agent avanzado: Imitamos un navegador Chrome reciente para máxima evasión.
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
+# **STRICT THROTLLING (CONFIGURACIÓN DE EVASIÓN):**
+# Concurrencia máxima general.
+CONCURRENT_REQUESTS = 4
+# Limita a 1 petición concurrente POR DOMINIO (Máximo Stealth para no saturar el servidor)
 CONCURRENT_REQUESTS_PER_DOMAIN = 1
-DOWNLOAD_DELAY = 1
 
-# Disable cookies (enabled by default)
-#COOKIES_ENABLED = False
+# Retraso entre peticiones para simular comportamiento humano (vital para evitar bloqueos)
+DOWNLOAD_DELAY = 1.5 
 
-# Disable Telnet Console (enabled by default)
-#TELNETCONSOLE_ENABLED = False
+# Deshabilitamos la consola Telnet
+TELNETCONSOLE_ENABLED = False 
 
-# Override the default request headers:
-#DEFAULT_REQUEST_HEADERS = {
-#    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-#    "Accept-Language": "en",
-#}
+# ==============================================================================
+# 3. ACTIVACIÓN DEL PIPELINE DE DATOS Y GEOFICACIÓN
+# ==============================================================================
 
-# Enable or disable spider middlewares
-# See https://docs.scrapy.org/en/latest/topics/spider-middleware.html
-#SPIDER_MIDDLEWARES = {
-#    "mi_proyecto.middlewares.MiProyectoSpiderMiddleware": 543,
-#}
+# Se definen los Pipelines que procesarán el Item (el Contrato de Datos BeneficioItem).
+# La prioridad (número) determina el orden de ejecución (menor número = primero).
+ITEM_PIPELINES = {
+    # 1. Normalización y Limpieza de datos brutos (300)
+    'mi_proyecto.pipelines.NormalizacionPipeline': 300, 
+    # 2. Geocodificación: Enriquecimiento del Item con Latitud/Longitud (400)
+    'mi_proyecto.pipelines.GeocodificacionPipeline': 400, 
+    # 3. Guardado final del resultado limpio en el repositorio Datos_app (800)
+    'mi_proyecto.pipelines.GuardadoFinalPipeline': 800, 
+}
 
-# Enable or disable downloader middlewares
-# See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-#DOWNLOADER_MIDDLEWARES = {
-#    "mi_proyecto.middlewares.MiProyectoDownloaderMiddleware": 543,
-#}
+# ==============================================================================
+# 4. CONFIGURACIÓN DEL DOWNLOADER MIDDLEWARE 
+# ==============================================================================
 
-# Enable or disable extensions
-# See https://docs.scrapy.org/en/latest/topics/extensions.html
-#EXTENSIONS = {
-#    "scrapy.extensions.telnet.TelnetConsole": None,
-#}
+DOWNLOADER_MIDDLEWARES = {
+    # Aquí puedes añadir tu middleware de Stealth si usas una librería (ej. RandomUserAgent).
+}
 
-# Configure item pipelines
-# See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
-#ITEM_PIPELINES = {
-#    "mi_proyecto.pipelines.MiProyectoPipeline": 300,
-#}
+# ==============================================================================
+# 5. CONFIGURACIÓN DE LOGGING
+# ==============================================================================
 
-# Enable and configure the AutoThrottle extension (disabled by default)
-# See https://docs.scrapy.org/en/latest/topics/autothrottle.html
-#AUTOTHROTTLE_ENABLED = True
-# The initial download delay
-#AUTOTHROTTLE_START_DELAY = 5
-# The maximum download delay to be set in case of high latencies
-#AUTOTHROTTLE_MAX_DELAY = 60
-# The average number of requests Scrapy should be sending in parallel to
-# each remote server
-#AUTOTHROTTLE_TARGET_CONCURRENCY = 1.0
-# Enable showing throttling stats for every response received:
-#AUTOTHROTTLE_DEBUG = False
-
-# Enable and configure HTTP caching (disabled by default)
-# See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html#httpcache-middleware-settings
-#HTTPCACHE_ENABLED = True
-#HTTPCACHE_EXPIRATION_SECS = 0
-#HTTPCACHE_DIR = "httpcache"
-#HTTPCACHE_IGNORE_HTTP_CODES = []
-#HTTPCACHE_STORAGE = "scrapy.extensions.httpcache.FilesystemCacheStorage"
-
-# Set settings whose default value is deprecated to a future-proof value
-FEED_EXPORT_ENCODING = "utf-8"
+# Nivel de logging. Recomendado 'INFO' para ver progreso o 'DEBUG' para detalles de requests/respuestas.
+LOG_LEVEL = 'INFO' 
+```eof
