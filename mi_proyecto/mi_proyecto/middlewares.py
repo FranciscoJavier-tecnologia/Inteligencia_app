@@ -6,24 +6,25 @@ from scrapy.http import HtmlResponse, Request
 from playwright.sync_api import sync_playwright
 import random
 import time
-from scrapy import signals
-from itemadapter import ItemAdapter
-import os 
 import logging
+import os 
+from scrapy.utils.project import get_project_settings 
 
-# Importamos la lista de User-Agents desde settings
-# Asumimos que esta lista existe en mi_proyecto/mi_proyecto/settings.py
+# Intentamos importar la lista de User-Agents desde settings
 try:
-    from mi_proyecto.settings import USER_AGENT_LIST
-except ImportError:
+    settings = get_project_settings()
+    USER_AGENT_LIST = settings.getlist('USER_AGENT_LIST')
+except Exception:
     USER_AGENT_LIST = []
-    logging.warning("USER_AGENT_LIST no está definida. Usando lista vacía.")
 
+# ====================================================================
+# MIDDLEWARE 1: RANDOM USER AGENT (STEALTH)
+# ====================================================================
 
 class RandomUserAgentMiddleware:
     """
-    Downloader Middleware que implementa el Stealth.
-    Rota el User-Agent para cada solicitud y maneja reintentos por bloqueo.
+    Downloader Middleware que implementa el Stealth (Rotación de User-Agent) 
+    y maneja reintentos por bloqueo (403/429).
     """
     
     def process_request(self, request, spider):
@@ -32,16 +33,16 @@ class RandomUserAgentMiddleware:
             selected_user_agent = random.choice(USER_AGENT_LIST)
             request.headers.setdefault('User-Agent', selected_user_agent)
             
-        # 2. Inyección de Headers de Cortesía (Simulación de usuario chileno)
+        # 2. Inyección de Headers de Cortesía
         request.headers.setdefault('Accept-Language', 'es-CL,es;q=0.9')
         
         return None 
     
     def process_response(self, request, response, spider):
         """
-        Maneja la respuesta: Si detectamos un bloqueo (403 o 429), reintentamos.
+        Maneja la respuesta: Si detectamos un código de bloqueo, reintentamos.
         """
-        # Si la respuesta es un código de bloqueo
+        # Si la respuesta es un código de bloqueo (403 o 429)
         if response.status in [403, 429]:
             spider.logger.warning(f"BLOQUEO DETECTADO. STATUS: {response.status}. Reintentando con nueva identidad.")
             
@@ -55,6 +56,10 @@ class RandomUserAgentMiddleware:
             
         return response
 
+
+# ====================================================================
+# MIDDLEWARE 2: PLAYWRIGHT (EVASIÓN DINÁMICA - Soluciona Cero Items)
+# ====================================================================
 
 class PlaywrightMiddleware:
     """
@@ -80,19 +85,19 @@ class PlaywrightMiddleware:
                 try:
                     page.goto(request.url, wait_until="domcontentloaded")
                     
-                    # Espera Inteligente: Esperamos hasta que las tarjetas (div.group-hover) aparezcan
+                    # Espera Inteligente: Esperamos hasta que las tarjetas aparezcan (Soluciona Cero Items)
                     page.wait_for_selector("div.group-hover", timeout=5000) 
                     
-                    # Simulación de Scroll para cargar contenido (Lazy Loading)
+                    # Simulación de Scroll para Lazy Loading
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    page.wait_for_timeout(1000) 
+                    page.wait_for_timeout(1000) # Espera un segundo extra
                     
                     html_content = page.content()
                     
                 finally:
                     browser.close()
             
-            # Devolvemos el HTML renderizado a Scrapy para que el Spider lo procese
+            # Devolvemos el HTML renderizado a Scrapy
             return HtmlResponse(
                 url=request.url,
                 body=html_content,
