@@ -69,4 +69,4 @@ DOWNLOADER_MIDDLEWARES = {
 
 # Nivel de logging. Recomendado 'INFO' para ver progreso o 'DEBUG' para detalles de requests/respuestas.
 LOG_LEVEL = 'INFO' 
-```eof
+
