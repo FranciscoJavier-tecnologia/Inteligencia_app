@@ -1,13 +1,14 @@
 # Repositorio: Inteligencia_app
 # Archivo: mi_proyecto/mi_proyecto/middlewares.py
-# Implementa la Evasión Dinámica (Playwright) y la rotación de User-Agent (Stealth).
+# SOLUCIÓN CRÍTICA: Implementa Playwright de forma ASÍNCRONA.
 
-from scrapy.http import HtmlResponse, Request
-from playwright.sync_api import sync_playwright
+from scrapy.http import HtmlResponse
+from playwright.async_api import async_playwright
+from twisted.internet.defer import Deferred # Necesario para compatibilidad asíncrona
 import random
 import time
 import logging
-import os 
+import asyncio
 from scrapy.utils.project import get_project_settings 
 
 # Intentamos importar la lista de User-Agents desde settings
@@ -18,91 +19,84 @@ except Exception:
     USER_AGENT_LIST = []
 
 # ====================================================================
-# MIDDLEWARE 1: RANDOM USER AGENT (STEALTH)
+# MIDDLEWARE 1: RANDOM USER AGENT (STEALTH) - No requiere cambios ASYNC
 # ====================================================================
 
 class RandomUserAgentMiddleware:
-    """
-    Downloader Middleware que implementa el Stealth (Rotación de User-Agent) 
-    y maneja reintentos por bloqueo (403/429).
-    """
+    """Implementa el Stealth (Rotación de User-Agent)."""
     
     def process_request(self, request, spider):
-        # 1. Rotación de User-Agent: Selecciona una identidad aleatoria
         if USER_AGENT_LIST:
             selected_user_agent = random.choice(USER_AGENT_LIST)
             request.headers.setdefault('User-Agent', selected_user_agent)
             
-        # 2. Inyección de Headers de Cortesía
         request.headers.setdefault('Accept-Language', 'es-CL,es;q=0.9')
-        
         return None 
     
     def process_response(self, request, response, spider):
-        """
-        Maneja la respuesta: Si detectamos un código de bloqueo, reintentamos.
-        """
-        # Si la respuesta es un código de bloqueo (403 o 429)
         if response.status in [403, 429]:
             spider.logger.warning(f"BLOQUEO DETECTADO. STATUS: {response.status}. Reintentando con nueva identidad.")
-            
             new_request = request.copy()
             new_request.dont_filter = True 
-            
-            # Aplicamos un retardo de reintento forzado (Stealth)
             time.sleep(random.uniform(5, 10)) 
-            
             return new_request 
             
         return response
 
 
 # ====================================================================
-# MIDDLEWARE 2: PLAYWRIGHT (EVASIÓN DINÁMICA - Soluciona Cero Items)
+# MIDDLEWARE 2: PLAYWRIGHT ASÍNCRONO (SOLUCIÓN DEL ERROR CRÍTICO)
 # ====================================================================
 
 class PlaywrightMiddleware:
     """
-    Downloader Middleware que usa Playwright para renderizar la página dinámicamente.
-    Soluciona el problema de "Cero Items" ejecutando JavaScript.
+    Downloader Middleware que usa Playwright de forma ASÍNCRONA.
+    Resuelve el conflicto del asyncio loop.
     """
-    
     def process_request(self, request, spider):
-        # CRÍTICO: Identificamos si la URL es de nuestro target (Banco de Chile)
+        # CRÍTICO: Solo se ejecuta para nuestro dominio objetivo.
         if 'bancochile.cl' in request.url:
             spider.logger.info(f"PLAYWRIGHT ACTIVO: Renderizando URL para JavaScript: {request.url}")
             
-            # Usamos Playwright de forma síncrona
-            with sync_playwright() as p:
-                # Usamos Chromium sin interfaz gráfica (headless=True)
-                browser = p.chromium.launch(headless=True) 
-                
-                # Contexto: Usamos el User-Agent ya definido por el RandomUserAgentMiddleware
-                user_agent = request.headers.get('User-Agent').decode() if request.headers.get('User-Agent') else None
-                context = browser.new_context(user_agent=user_agent)
-                page = context.new_page()
-                
-                try:
-                    page.goto(request.url, wait_until="domcontentloaded")
-                    
-                    # Espera Inteligente: Esperamos hasta que las tarjetas aparezcan (Soluciona Cero Items)
-                    page.wait_for_selector("div.group-hover", timeout=5000) 
-                    
-                    # Simulación de Scroll para Lazy Loading
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    page.wait_for_timeout(1000) # Espera un segundo extra
-                    
-                    html_content = page.content()
-                    
-                finally:
-                    browser.close()
-            
-            # Devolvemos el HTML renderizado a Scrapy
-            return HtmlResponse(
-                url=request.url,
-                body=html_content,
-                encoding='utf-8',
-                request=request
-            )
+            # Devolvemos un Deferred para que Scrapy sepa que es una operación asíncrona.
+            d = Deferred()
+            d.addCallback(self._render_page, request, spider)
+            return d
         
         return None
+
+    async def _render_page(self, response, request, spider):
+        """
+        Función asíncrona que maneja la lógica de Playwright.
+        """
+        async with async_playwright() as p:
+            # Usamos Chromium sin interfaz gráfica (headless=True)
+            browser = await p.chromium.launch(headless=True) 
+            
+            # Pasamos el User-Agent ya definido
+            user_agent = request.headers.get('User-Agent').decode() if request.headers.get('User-Agent') else None
+            context = await browser.new_context(user_agent=user_agent)
+            page = await context.new_page()
+            
+            try:
+                await page.goto(request.url, wait_until="domcontentloaded")
+                
+                # Espera Inteligente: Esperamos a que las tarjetas aparezcan (selector de clase estable)
+                await page.wait_for_selector("div.group-hover", timeout=5000) 
+                
+                # Simulación de Scroll (Lazy Loading)
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await page.wait_for_timeout(1000) 
+                
+                html_content = await page.content()
+                
+            finally:
+                await browser.close()
+        
+        # Devolvemos el HTML renderizado (con las tarjetas cargadas)
+        return HtmlResponse(
+            url=request.url,
+            body=html_content.encode('utf-8'), # Codificamos el cuerpo
+            encoding='utf-8',
+            request=request
+        )
