@@ -104,19 +104,3 @@ class GuardadoFinalPipeline(object):
         self.file.write(line)
         return item
 ```eof
-
----
-
-### 🟢 Próximo Paso: Ejecución del MVP
-
-¡Felicidades! Has completado la codificación de todos los componentes clave para tu Producto Mínimo Viable (MVP) del **Super Bot Aggregator CL**.
-
-Tu motor `Inteligencia_app` ahora tiene:
-1.  **Contrato de Datos (`items.py`)**
-2.  **Cerebro de Extracción (`bancochile_spider.py`)** con lógica de Dos Fases.
-3.  **Sala de Control (`settings.py`)** con Stealth y Pipelines activados.
-4.  **Cerebros de Limpieza (`pipelines.py`)** con Normalización, Geocodificación y Guardado.
-
-**El único paso pendiente es la instalación de la librería `geopy` y luego la ejecución del bot.**
-
-¿Quieres que te recuerde el comando para ejecutar el bot y te prepare para la fase de pruebas?
