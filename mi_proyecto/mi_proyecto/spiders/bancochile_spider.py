@@ -8,7 +8,7 @@ from mi_proyecto.items import BeneficioItem
 
 # Definimos la ruta BASE para el repositorio 'Fuentes_app'
 # Asumimos que Fuentes_app e Inteligencia_app están al mismo nivel (son hermanos)
-FUENTES_APP_PATH = Path(os.getcwd()).parents[2] / 'Fuentes_app'
+FUENTES_APP_PATH = Path(os.getcwd()).parents[3] / 'Fuentes_app'
 FUENTES_BASE_URL = 'https://www.bancochile.cl/api/promociones' # URL base para la API o sitio
 
 class BancoChileSpider(scrapy.Spider):
@@ -113,3 +113,4 @@ class BancoChileSpider(scrapy.Spider):
         
         # 2. Finalmente, se envía el Item completo al Pipeline (pipelines.py)
         yield item
+
