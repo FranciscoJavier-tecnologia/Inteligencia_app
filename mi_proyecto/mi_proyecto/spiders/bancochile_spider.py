@@ -6,9 +6,13 @@ import logging
 # Importamos el Contrato de Datos que definiste
 from mi_proyecto.items import BeneficioItem
 
-# Definimos la ruta BASE para el repositorio 'Fuentes_app'
-# Asumimos que Fuentes_app e Inteligencia_app están al mismo nivel (son hermanos)
-FUENTES_APP_PATH = Path(os.getcwd()).parents[3] / 'Fuentes_app'
+# --- CORRECCIÓN CRÍTICA DE RUTA PARA WINDOWS (USERPROFILE) ---
+# Se utiliza la variable de entorno de Windows (C:\Users\PCXTEC05) para asegurar la ruta absoluta,
+# ya que el cálculo relativo parents[] falló en este entorno.
+USER_PROFILE = os.environ.get('USERPROFILE', Path.home()) 
+FUENTES_APP_PATH = Path(USER_PROFILE) / 'Fuentes_app'
+# -------------------------------------------------------------
+
 FUENTES_BASE_URL = 'https://www.bancochile.cl/api/promociones' # URL base para la API o sitio
 
 class BancoChileSpider(scrapy.Spider):
@@ -27,10 +31,11 @@ class BancoChileSpider(scrapy.Spider):
         """
         logging.info("Iniciando requests: Leyendo archivos de Fuentes_app...")
         
-        # 1. Definir la ruta de los archivos .txt
+        # 1. Definir la ruta de los archivos .txt usando la ruta absoluta corregida
         ruta_segmentos = FUENTES_APP_PATH / 'Bancos y Tarjetas' / 'banco_chile'
         
         if not ruta_segmentos.is_dir():
+             # Este error ahora solo ocurrirá si Fuentes_app no existe en el directorio de usuario.
              logging.error(f"¡ERROR CRÍTICO! No se encontró la ruta: {ruta_segmentos}")
              return
 
@@ -62,8 +67,6 @@ class BancoChileSpider(scrapy.Spider):
         FASE 1: Extrae los datos visibles de la tarjeta y el link de detalle.
         """
         logging.info(f"FASE 1 (Lista): Procesando URL: {response.url}")
-        
-        # --- (Tu lógica de selectores Scrapy para la lista va aquí) ---
         
         # Selector de EJEMPLO: Recorrer cada tarjeta de promoción
         for tarjeta in response.css('div.promocion-card'): 
@@ -104,8 +107,6 @@ class BancoChileSpider(scrapy.Spider):
         # Recuperar el Item que venía de la Fase 1
         item = response.meta['item'] 
         
-        # --- (Tu lógica de selectores Scrapy para la página de detalle va aquí) ---
-
         # 1. Rellenar campos de la FASE 2 (SELECTORES DE EJEMPLO: DEBEN SER REEMPLAZADOS)
         item['validez_larga_texto'] = response.css('div.vigencia-larga::text').get()
         item['lugar_referencia'] = response.css('span.direccion::text').get()
