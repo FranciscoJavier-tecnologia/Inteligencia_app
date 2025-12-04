@@ -22,51 +22,67 @@ FEED_EXPORT_ENCODING = 'utf-8'
 # 2. CONFIGURACIONES CRÍTICAS DE EXTRACCIÓN Y EVASIÓN (Stealth)
 # ==============================================================================
 
-# Desactivamos la obediencia al robots.txt para acceder a todas las URLs (CRÍTICO para scraping)
+# Desactivamos la obediencia al robots.txt (CRÍTICO para scraping profesional)
 ROBOTSTXT_OBEY = False
 
-# User-Agent avanzado: Imitamos un navegador Chrome reciente para máxima evasión.
-USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+# ELIMINAMOS EL USER_AGENT FIJO. Usaremos el middleware de rotación.
+# USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Wi...' 
+
+# Lista de User-Agents para el Middleware de rotación
+USER_AGENT_LIST = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+]
+
 
 # **STRICT THROTLLING (CONFIGURACIÓN DE EVASIÓN):**
-# Concurrencia máxima general.
-CONCURRENT_REQUESTS = 4
-# Limita a 1 petición concurrente POR DOMINIO (Máximo Stealth para no saturar el servidor)
-CONCURRENT_REQUESTS_PER_DOMAIN = 1
+CONCURRENT_REQUESTS = 16 # Aumentamos para eficiencia general
+CONCURRENT_REQUESTS_PER_DOMAIN = 1 # CRÍTICO: 1 petición concurrente POR DOMINIO (Máximo Stealth)
 
 # Retraso entre peticiones para simular comportamiento humano (vital para evitar bloqueos)
-DOWNLOAD_DELAY = 1.5 
+DOWNLOAD_DELAY = 2.5 # Aumentamos de 1.5s a 2.5s para mayor cortesía.
+RANDOMIZE_DOWNLOAD_DELAY = True # CRÍTICO: Añade un retardo aleatorio (Stealth)
 
-# Deshabilitamos la consola Telnet
-TELNETCONSOLE_ENABLED = False 
-
-# ==============================================================================
-# 3. ACTIVACIÓN DEL PIPELINE DE DATOS Y GEOFICACIÓN
-# ==============================================================================
-
-# Se definen los Pipelines que procesarán el Item (el Contrato de Datos BeneficioItem).
-# La prioridad (número) determina el orden de ejecución (menor número = primero).
-ITEM_PIPELINES = {
-    # 1. Normalización y Limpieza de datos brutos (300)
-    'mi_proyecto.pipelines.NormalizacionPipeline': 300, 
-    # 2. Geocodificación: Enriquecimiento del Item con Latitud/Longitud (400)
-    'mi_proyecto.pipelines.GeocodificacionPipeline': 400, 
-    # 3. Guardado final del resultado limpio en el repositorio Datos_app (800)
-    'mi_proyecto.pipelines.GuardadoFinalPipeline': 800, 
-}
 
 # ==============================================================================
-# 4. CONFIGURACIÓN DEL DOWNLOADER MIDDLEWARE 
+# 3. ACTIVACIÓN DE MIDDLEWARES DE ÉLITE (Soluciona el fallo de log)
 # ==============================================================================
 
 DOWNLOADER_MIDDLEWARES = {
-    # Aquí puedes añadir tu middleware de Stealth si usas una librería (ej. RandomUserAgent).
+    # 1. Desactivamos el User-Agent por defecto de Scrapy
+    'scrapy.downloadermiddlewares.useragent.UserAgentMiddleware': None, 
+    # 2. Activamos nuestro Middleware de Rotación de Identidad (Stealth)
+    'mi_proyecto.middlewares.RandomUserAgentMiddleware': 400, 
+    # 3. CRÍTICO: Activamos la Evasión Dinámica para ver el JavaScript (Playwright)
+    'mi_proyecto.middlewares.PlaywrightMiddleware': 500, 
+}
+
+# Deshabilitamos la consola Telnet
+TELNETCONSOLE_ENABLED = False
+
+# Deshabilitamos las cookies para simplificar la sesión
+COOKIES_ENABLED = False
+
+
+# ==============================================================================
+# 4. ACTIVACIÓN DEL PIPELINE DE DATOS Y GEOFICACIÓN
+# ==============================================================================
+
+# Se definen los Pipelines que procesarán el Item.
+# ORDEN CORREGIDO: Geocodificación debe ir DESPUÉS de la Normalización (Limpieza).
+ITEM_PIPELINES = {
+    # 1. Normalización y Limpieza (ej. "50% dto." -> 0.50 y generación de id_unico)
+    'mi_proyecto.pipelines.DataCleaningPipeline': 300, 
+    # 2. Geocodificación (Requiere el lugar_referencia limpio para funcionar)
+    'mi_proyecto.pipelines.GeocodingPipeline': 400, 
+    # 3. Guardado final del resultado limpio en el repositorio Datos_app
+    'mi_proyecto.pipelines.JsonWriterPipeline': 800, 
 }
 
 # ==============================================================================
 # 5. CONFIGURACIÓN DE LOGGING
 # ==============================================================================
 
-# Nivel de logging. Recomendado 'INFO' para ver progreso o 'DEBUG' para detalles de requests/respuestas.
-LOG_LEVEL = 'INFO' 
-
+# Nivel de logging. Recomendado 'INFO' para ver progreso.
+LOG_LEVEL = 'INFO'
